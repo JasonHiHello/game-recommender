@@ -1,29 +1,42 @@
 from fastapi import FastAPI, HTTPException
 from curl_cffi import requests
+import json
 
-app = FastAPI(title="Exophase Scraper API", version="2.0.0")
+app = FastAPI(title="Exophase Scraper API", version="3.0.0")
 
 @app.get("/games/{username}")
 def get_games(username: str):
-    # Your internal Exophase Player ID
-    player_id = "2416490"
+    player_id = "2416490"  # Your Exophase ID
+    formatted_games = []
     
-    all_games = []
-    
-    # Let's fetch the first 2 pages of your library 
     for page in range(1, 3):
-        # We hit the raw API endpoint you found
         url = f"https://api.exophase.com/public/player/{player_id}/games?page={page}&sort=1"
         response = requests.get(url, impersonate="chrome")
         
         if response.status_code == 200:
-            # We don't even need to parse HTML. We just grab the raw JSON!
-            data = response.json()
-            all_games.append(data)
+            res_json = response.json()
             
-    if not all_games:
-        raise HTTPException(status_code=404, detail="Failed to fetch from Exophase API")
+            # The API might store games in res_json["list"] or res_json["games"]["list"]
+            # This safely finds the list wherever it is.
+            raw_games = res_json.get("list", [])
+            if not raw_games and "games" in res_json:
+                raw_games = res_json["games"].get("list", [])
+                
+            for item in raw_games:
+                title = item.get("title", "Unknown Title")
+                hours = item.get("hours", item.get("playtime", 0))
+                
+                # Exophase sometimes uses "last_played_timestamp" or similar. 
+                # We pull whatever they have, or default to "Unknown" to satisfy Coze.
+                last_played = item.get("last_played", item.get("last_played_str", "Recently"))
+                
+                formatted_games.append({
+                    "title": str(title),
+                    "playtime": f"{hours} hours",
+                    "last_played": str(last_played) # Required by Coze schema
+                })
 
-    # We hand the raw JSON directly back to the AI. 
-    # LLMs are native JSON readers and will understand the data perfectly.
-    return {"username": username, "exophase_data": all_games}
+    if not formatted_games:
+        raise HTTPException(status_code=404, detail="No games found. Exophase API structure may have changed.")
+
+    return {"username": username, "games": formatted_games}
