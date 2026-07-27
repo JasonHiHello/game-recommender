@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-import requests
+from curl_cffi import requests
 from bs4 import BeautifulSoup
 
 app = FastAPI(title="Exophase Scraper API", version="1.0.0")
@@ -7,8 +7,9 @@ app = FastAPI(title="Exophase Scraper API", version="1.0.0")
 @app.get("/games/{username}")
 def get_games(username: str):
     url = f"https://www.exophase.com/user/{username}/"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    response = requests.get(url, headers=headers)
+    
+    # We use curl_cffi to mimic a Chrome browser fingerprint
+    response = requests.get(url, impersonate="chrome")
     
     if response.status_code != 200:
         raise HTTPException(status_code=404, detail="Profile not found or inaccessible")
